@@ -27,7 +27,8 @@ fn main() {
                 client_connections_lock.push(cloned_write_stream);
                 drop(client_connections_lock); //Free our lock
 
-                thread::spawn(move|| client_handler(stream, cloned_tx));
+                let cloned_read_stream = Arc::clone(&client_connections);
+                thread::spawn(move|| client_handler(stream, cloned_tx, &*cloned_read_stream));
             }
             Err(err) => { println!("Error {}", err); }
         }
@@ -44,8 +45,8 @@ fn create_socket() -> TcpListener{
     listener
 }
 
-fn client_handler(mut stream : TcpStream, tx : Sender<String>){
-    stream.write("Welcome to the Rust chat server!".as_bytes());
+fn client_handler(mut stream : TcpStream, tx : Sender<String>, clients : &Mutex<Vec<TcpStream>>){
+    stream.write("Welcome to the Rust chat server!\n".as_bytes());
 
     'client_loop: loop {
         //Our receiving buffer
@@ -58,7 +59,12 @@ fn client_handler(mut stream : TcpStream, tx : Sender<String>){
                 tx.send(String::from(received_msg)).unwrap() //Sharing data across threads
             }
             Err(err) => {
-                println!("Terminating connection with {}", stream.peer_addr().unwrap());
+                let streamAddress = stream.peer_addr().unwrap();
+                println!("Terminating connection with {}", streamAddress);
+
+                let mut clients_locked = clients.lock().unwrap();
+                clients_locked.retain(|client| client.peer_addr().unwrap() == streamAddress);
+                drop(clients_locked);
                 stream.shutdown(Shutdown::Both); //Closing read and write streams
                 break;
             }
@@ -68,6 +74,9 @@ fn client_handler(mut stream : TcpStream, tx : Sender<String>){
 
 fn broadcast_msg(rx : Receiver<String>, clients : &Mutex<Vec<TcpStream>>) {
     loop {
+        {
+            println!("Clients Connected: {}", clients.lock().unwrap().len());
+        }
         match rx.recv(){
             Ok(message) => {
                 let mut clients_lock = clients.lock().unwrap();

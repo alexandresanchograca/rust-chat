@@ -52,6 +52,7 @@ fn rcv_msg_handler(mut stream:  &TcpStream) -> std::io::Result<()>{
 fn send_msg_handler(username : String, mut stream:  &TcpStream)-> std::io::Result<()>{
 
     loop{
+        thread::sleep(Duration::from_millis(100));
         let mut input_buffer = String::from(&username);
         let line_size = stdin().read_line(&mut input_buffer).unwrap();
 
